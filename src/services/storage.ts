@@ -16,6 +16,7 @@ import { seedDatabaseIfNeeded } from './seed';
 export interface CategoryRecord {
   id: string;
   name: string;
+  icon?: string;
   order_index: number;
   active: boolean;
 }
@@ -123,6 +124,7 @@ const STORAGE_KEYS = {
   ORDERS: 'cantinho_orders_db',
   COUPONS: 'cantinho_active_coupons_db',
   PRODUCTS: 'cantinho_products_db',
+  CATEGORIES: 'cantinho_categories_db',
   SETTINGS: 'cantinho_store_settings_db',
 };
 
@@ -520,6 +522,166 @@ export const resetProductsToDefault = (): MenuProduct[] => {
     });
 
   return initial;
+};
+
+// ============================================================================
+// 1.5. GESTÃO DE CATEGORIAS DO CARDÁPIO (SUPABASE: categorias)
+// ============================================================================
+
+export const DEFAULT_CATEGORIES: CategoryRecord[] = [
+  { id: 'pizzas', name: 'Pizzas', icon: 'pizza', order_index: 1, active: true },
+  { id: 'acai', name: 'Açaí', icon: 'acai', order_index: 2, active: true },
+  { id: 'pizzas-doces', name: 'Pizzas Doces', icon: 'doce', order_index: 3, active: true },
+  { id: 'esfihas', name: 'Esfihas', icon: 'esfiha', order_index: 4, active: true },
+  { id: 'bebidas', name: 'Bebidas', icon: 'bebida', order_index: 5, active: true },
+  { id: 'sobremesas', name: 'Sobremesas', icon: 'sobremesa', order_index: 6, active: true },
+];
+
+export const getStoredCategories = (): CategoryRecord[] => {
+  if (typeof window === 'undefined') return DEFAULT_CATEGORIES;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length > 0) {
+        return list.sort((a, b) => a.order_index - b.order_index);
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao ler categorias do cache local:', e);
+  }
+
+  saveStoredCategories(DEFAULT_CATEGORIES);
+  return DEFAULT_CATEGORIES;
+};
+
+export const saveStoredCategories = (categories: CategoryRecord[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    window.dispatchEvent(new CustomEvent('cantinho:categories_updated', { detail: categories }));
+  } catch (e) {
+    console.error('Erro ao salvar categorias localmente:', e);
+  }
+};
+
+export const syncCategoriesFromSupabase = async (): Promise<CategoryRecord[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('categorias')
+      .select('*')
+      .order('ordem', { ascending: true });
+
+    if (error) {
+      console.warn('Aviso ao sincronizar categorias do Supabase:', error.message);
+      return getStoredCategories();
+    }
+
+    if (data && data.length > 0) {
+      const mapped: CategoryRecord[] = data.map((row) => ({
+        id: row.id,
+        name: row.nome || row.name || 'Categoria',
+        icon: row.icone || row.icon || 'pizza',
+        order_index: Number(row.ordem ?? row.order_index ?? 0),
+        active: (row.ativo ?? row.active) !== false,
+      }));
+      saveStoredCategories(mapped);
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Erro ao conectar categorias ao Supabase:', err);
+  }
+  return getStoredCategories();
+};
+
+export const createCategory = async (cat: {
+  id?: string;
+  name: string;
+  icon?: string;
+  order_index?: number;
+  active?: boolean;
+}): Promise<CategoryRecord> => {
+  const current = getStoredCategories();
+  const slug =
+    cat.id ||
+    cat.name
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '-');
+  const newCat: CategoryRecord = {
+    id: slug || `cat-${Date.now()}`,
+    name: cat.name.trim(),
+    icon: cat.icon || 'pizza',
+    order_index: cat.order_index ?? current.length + 1,
+    active: cat.active !== false,
+  };
+
+  const updated = [...current.filter((c) => c.id !== newCat.id), newCat];
+  saveStoredCategories(updated);
+
+  try {
+    await supabase.from('categorias').upsert({
+      id: newCat.id,
+      nome: newCat.name,
+      icone: newCat.icon,
+      ordem: newCat.order_index,
+      ativo: newCat.active,
+      atualizado_em: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Erro ao persistir nova categoria no Supabase:', err);
+  }
+
+  return newCat;
+};
+
+export const updateCategory = async (
+  id: string,
+  updates: Partial<CategoryRecord>
+): Promise<CategoryRecord> => {
+  const current = getStoredCategories();
+  let updatedCat: CategoryRecord | null = null;
+
+  const nextList = current.map((c) => {
+    if (c.id === id) {
+      updatedCat = { ...c, ...updates };
+      return updatedCat;
+    }
+    return c;
+  });
+
+  if (!updatedCat) throw new Error('Categoria não encontrada.');
+
+  saveStoredCategories(nextList);
+
+  try {
+    const payload: any = { atualizado_em: new Date().toISOString() };
+    if (updates.name !== undefined) payload.nome = updates.name;
+    if (updates.icon !== undefined) payload.icone = updates.icon;
+    if (updates.order_index !== undefined) payload.ordem = updates.order_index;
+    if (updates.active !== undefined) payload.ativo = updates.active;
+
+    await supabase.from('categorias').update(payload).eq('id', id);
+  } catch (err) {
+    console.warn('Erro ao atualizar categoria no Supabase:', err);
+  }
+
+  return updatedCat;
+};
+
+export const deleteCategory = async (id: string): Promise<boolean> => {
+  const current = getStoredCategories();
+  const nextList = current.filter((c) => c.id !== id);
+  saveStoredCategories(nextList);
+
+  try {
+    await supabase.from('categorias').delete().eq('id', id);
+  } catch (err) {
+    console.warn('Erro ao excluir categoria no Supabase:', err);
+  }
+
+  return true;
 };
 
 // ============================================================================
@@ -1698,6 +1860,7 @@ if (typeof window !== 'undefined') {
     try {
       await seedDatabaseIfNeeded();
     } catch {}
+    syncCategoriesFromSupabase();
     syncProductsFromSupabase();
     syncSettingsFromSupabase();
   }, 100);

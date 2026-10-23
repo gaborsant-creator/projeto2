@@ -48,6 +48,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Volume2,
+  Layers,
 } from 'lucide-react';
 import {
   processAndUploadProductImage,
@@ -56,6 +57,7 @@ import {
 import {
   OrderRecord,
   CustomerRecord,
+  CategoryRecord,
   getStoredProducts,
   saveStoredProducts,
   updateProduct,
@@ -82,11 +84,17 @@ import {
   getCustomerConsumptionHabits,
   CustomerConsumptionHabits,
   resolveProductImage,
+  getStoredCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  syncCategoriesFromSupabase,
 } from '../../services/storage';
 import { MenuProduct, CategoryId } from '../../types';
 import { CATEGORIES } from '../../data/menuData';
 import { AdminLogin } from './AdminLogin';
 import { playOrderNotificationSound, unlockAudio } from '../../services/sound';
+import { CategoryIcon, CATEGORY_ICON_OPTIONS } from '../CategoryNav';
 
 interface AdminDashboardProps {
   onBackToMenu: () => void;
@@ -117,10 +125,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
     setTimeout(() => setTestedSound(false), 2000);
   };
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'pizzas' | 'customers' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'pizzas' | 'categories' | 'customers' | 'settings'>('orders');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [products, setProducts] = useState<MenuProduct[]>([]);
+  const [categories, setCategories] = useState<CategoryRecord[]>(() => getStoredCategories());
   const [storeSettings, setStoreSettings] = useState<StoreSettingsRecord>(getStoreSettings());
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'novo' | 'preparando' | 'entrega' | 'concluido' | 'cancelado'>('all');
@@ -195,11 +204,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
   });
   const [selectedCustomerForHabits, setSelectedCustomerForHabits] = useState<CustomerRecord | null>(null);
 
+  // Estados de Gerenciamento de Categorias
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CategoryRecord | null>(null);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categoryFormError, setCategoryFormError] = useState<string | null>(null);
+  const [categoryForm, setCategoryForm] = useState<{
+    id: string;
+    name: string;
+    icon: string;
+    order_index: number;
+    active: boolean;
+  }>({
+    id: '',
+    name: '',
+    icon: 'pizza',
+    order_index: 0,
+    active: true,
+  });
+
   // Carrega dados iniciais
   const refreshData = () => {
     setOrders(fetchAllOrders());
     setCustomers(fetchAllCustomers());
     setProducts(getStoredProducts());
+    setCategories(getStoredCategories());
     setStoreSettings(getStoreSettings());
   };
 
@@ -238,17 +268,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
     const handleProductsUpdated = (e: any) => {
       if (e.detail) setProducts(e.detail);
     };
+    const handleCategoriesUpdated = (e: any) => {
+      if (e.detail) setCategories(e.detail);
+      else setCategories(getStoredCategories());
+    };
     const handleCustomerUpdated = () => {
       setCustomers(fetchAllCustomers());
     };
 
     window.addEventListener('cantinho:products_updated', handleProductsUpdated);
+    window.addEventListener('cantinho:categories_updated', handleCategoriesUpdated);
     window.addEventListener('cantinho:customer_updated', handleCustomerUpdated);
     window.addEventListener('frutella:customer_registered', handleCustomerUpdated);
 
     return () => {
       sub.unsubscribe();
       window.removeEventListener('cantinho:products_updated', handleProductsUpdated);
+      window.removeEventListener('cantinho:categories_updated', handleCategoriesUpdated);
       window.removeEventListener('cantinho:customer_updated', handleCustomerUpdated);
       window.removeEventListener('frutella:customer_registered', handleCustomerUpdated);
     };
@@ -497,6 +533,112 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
     if (confirm('Deseja restaurar todas as pizzas e produtos originais do cardápio?')) {
       const reset = resetProductsToDefault();
       setProducts(reset);
+    }
+  };
+
+  // Ações de Categorias
+  const handleOpenNewCategory = () => {
+    setEditingCategory(null);
+    setCategoryForm({
+      id: '',
+      name: '',
+      icon: 'pizza',
+      order_index: categories.length + 1,
+      active: true,
+    });
+    setCategoryFormError(null);
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleOpenEditCategory = (cat: CategoryRecord) => {
+    setEditingCategory(cat);
+    setCategoryForm({
+      id: cat.id,
+      name: cat.name,
+      icon: cat.icon || 'pizza',
+      order_index: cat.order_index ?? 0,
+      active: cat.active !== false,
+    });
+    setCategoryFormError(null);
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleToggleCategoryActive = async (cat: CategoryRecord) => {
+    try {
+      const updated = await updateCategory(cat.id, { active: !cat.active });
+      setCategories((prev) => prev.map((c) => (c.id === cat.id ? updated : c)));
+    } catch (err: any) {
+      alert(err?.message || 'Erro ao alterar status da categoria');
+    }
+  };
+
+  const handleDeleteCategory = async (cat: CategoryRecord) => {
+    const linkedCount = products.filter((p) => p.category === cat.id).length;
+    const msg =
+      linkedCount > 0
+        ? `A categoria "${cat.name}" possui ${linkedCount} item(ns) vinculado(s) no cardápio.\n\nTem certeza que deseja excluí-la? Os produtos continuarão no sistema, mas você precisará reatribuir a categoria deles.`
+        : `Deseja realmente excluir a categoria "${cat.name}"?`;
+    if (!confirm(msg)) return;
+
+    try {
+      await deleteCategory(cat.id);
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+    } catch (err: any) {
+      alert(err?.message || 'Erro ao excluir categoria');
+    }
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCategoryFormError(null);
+    const nameTrim = categoryForm.name.trim();
+    if (!nameTrim) {
+      setCategoryFormError('Informe o nome da categoria.');
+      return;
+    }
+
+    setIsSavingCategory(true);
+    try {
+      if (editingCategory) {
+        const updated = await updateCategory(editingCategory.id, {
+          name: nameTrim,
+          icon: categoryForm.icon,
+          order_index: Number(categoryForm.order_index) || 0,
+          active: categoryForm.active,
+        });
+        setCategories((prev) => prev.map((c) => (c.id === editingCategory.id ? updated : c)));
+      } else {
+        let idSlug = categoryForm.id.trim().toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        if (!idSlug) {
+          idSlug = nameTrim.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        }
+        if (!idSlug) idSlug = `cat-${Date.now()}`;
+
+        if (categories.some((c) => c.id === idSlug)) {
+          setCategoryFormError(`Já existe uma categoria com o identificador "${idSlug}". Escolha outro nome ou altere o ID.`);
+          setIsSavingCategory(false);
+          return;
+        }
+
+        const created = await createCategory({
+          id: idSlug,
+          name: nameTrim,
+          icon: categoryForm.icon,
+          order_index: Number(categoryForm.order_index) || 0,
+          active: categoryForm.active,
+        });
+        setCategories((prev) => [...prev, created]);
+      }
+      setIsCategoryModalOpen(false);
+      setEditingCategory(null);
+    } catch (err: any) {
+      setCategoryFormError(err?.message || 'Erro ao salvar categoria');
+    } finally {
+      setIsSavingCategory(false);
     }
   };
 
@@ -782,6 +924,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
             <span>Editar Cardápio & Pizzas</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-black/10">
               {products.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('categories')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'categories'
+                ? 'bg-[#8B0000] text-white shadow-xs'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Categorias</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-black/10">
+              {categories.length}
             </span>
           </button>
 
@@ -1223,7 +1380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                 >
                   Todas ({products.length})
                 </button>
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => setProductCategoryFilter(cat.id)}
@@ -1281,7 +1438,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                         />
                         <div className="absolute top-2 left-2 flex flex-wrap gap-1">
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-black/60 text-white backdrop-blur-xs">
-                            {CATEGORIES.find((c) => c.id === prod.category)?.name || prod.category}
+                            {categories.find((c) => c.id === prod.category)?.name || CATEGORIES.find((c) => c.id === prod.category)?.name || prod.category}
                           </span>
                           {prod.featured && (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-amber-500 text-white shadow-xs">
@@ -1372,6 +1529,156 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* ABA: GERENCIAR CATEGORIAS */}
+        {/* ============================================================== */}
+        {activeTab === 'categories' && (
+          <div className="space-y-6">
+            {/* Topo / Barra de Ações de Categorias */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar categoria..."
+                  value={categorySearch}
+                  onChange={(e) => setCategorySearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs bg-gray-50 focus:bg-white focus:outline-hidden focus:border-[#8B0000]"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <span className="text-xs text-gray-500 font-medium hidden md:inline">
+                  {categories.filter((c) => c.active !== false).length} ativas de {categories.length} total
+                </span>
+                <button
+                  onClick={handleOpenNewCategory}
+                  className="px-4 py-2 rounded-xl bg-[#8B0000] hover:bg-[#5E050B] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Categoria</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Grid de Categorias */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {categories
+                .filter((cat) =>
+                  !categorySearch ||
+                  cat.name.toLowerCase().includes(categorySearch.toLowerCase()) ||
+                  cat.id.toLowerCase().includes(categorySearch.toLowerCase())
+                )
+                .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+                .map((cat) => {
+                  const linkedProductsCount = products.filter((p) => p.category === cat.id).length;
+                  const isActive = cat.active !== false;
+
+                  return (
+                    <div
+                      key={cat.id}
+                      className={`bg-white rounded-2xl border p-5 flex flex-col justify-between shadow-xs transition-all ${
+                        isActive
+                          ? 'border-gray-200 hover:border-gray-300'
+                          : 'border-gray-200 bg-gray-50/70 opacity-75'
+                      }`}
+                    >
+                      <div>
+                        {/* Cabeçalho do Card */}
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-50 to-amber-50 border border-red-100/80 flex items-center justify-center text-[#8B0000] shadow-xs shrink-0">
+                              <CategoryIcon iconKey={cat.icon || cat.id} className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900 text-base leading-tight">
+                                {cat.name}
+                              </h4>
+                              <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-gray-100 text-gray-600">
+                                #{cat.id}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Badge / Botão Ativo */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCategoryActive(cat)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase cursor-pointer border shadow-xs transition-colors ${
+                              isActive
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
+                            }`}
+                            title="Clique para alternar visibilidade no cardápio"
+                          >
+                            {isActive ? 'Ativa' : 'Oculta'}
+                          </button>
+                        </div>
+
+                        {/* Informações da Categoria */}
+                        <div className="space-y-1.5 py-2 border-y border-gray-100 text-xs text-gray-600">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">Produtos vinculados:</span>
+                            <span className="font-bold text-gray-800">
+                              {linkedProductsCount} {linkedProductsCount === 1 ? 'item' : 'itens'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">Ícone selecionado:</span>
+                            <span className="font-semibold text-gray-700 capitalize flex items-center gap-1.5">
+                              <CategoryIcon iconKey={cat.icon || cat.id} className="w-3.5 h-3.5 text-[#8B0000]" />
+                              {cat.icon || cat.id}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">Ordem na barra:</span>
+                            <span className="font-semibold text-gray-700">
+                              Posição #{cat.order_index ?? 0}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Ações */}
+                      <div className="pt-3 mt-3 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProductCategoryFilter(cat.id);
+                            setActiveTab('pizzas');
+                          }}
+                          className="text-xs font-semibold text-[#8B0000] hover:text-[#5E050B] hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          Ver itens ({linkedProductsCount})
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditCategory(cat)}
+                            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 transition-colors cursor-pointer"
+                            title="Editar Nome, Ícone e Ordem da Categoria"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCategory(cat)}
+                            className="p-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 transition-colors cursor-pointer"
+                            title="Excluir Categoria"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         )}
@@ -1942,7 +2249,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                     }
                     className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-hidden focus:border-[#8B0000]"
                   >
-                    {CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -2168,6 +2475,203 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                   className="px-5 py-2 rounded-xl bg-[#8B0000] hover:bg-[#5E050B] text-white text-xs font-bold shadow-xs cursor-pointer"
                 >
                   {editingProduct ? 'Salvar Alterações' : 'Adicionar ao Cardápio'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: NOVA / EDITAR CATEGORIA */}
+      {/* ============================================================== */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-100 text-[#8B0000] flex items-center justify-center">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-base text-gray-900">
+                  {editingCategory ? `Editar Categoria: ${editingCategory.name}` : 'Nova Categoria'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCategory(null);
+                  setIsCategoryModalOpen(false);
+                }}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {categoryFormError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{categoryFormError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveCategory} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  Nome da Categoria *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Açaí, Pizzas Especiais, Sobremesas..."
+                  value={categoryForm.name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCategoryForm((prev) => ({
+                      ...prev,
+                      name: val,
+                      id: editingCategory
+                        ? prev.id
+                        : val
+                            .toLowerCase()
+                            .normalize('NFD')
+                            .replace(/[\u0300-\u036f]/g, '')
+                            .replace(/[^a-z0-9_-]/g, '-')
+                            .replace(/-+/g, '-')
+                            .replace(/^-|-$/g, ''),
+                    }));
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-hidden focus:border-[#8B0000]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  Identificador Único (Slug) {editingCategory ? '(fixo)' : '*'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  disabled={!!editingCategory}
+                  placeholder="Ex: acai, sobremesas, bebidas"
+                  value={categoryForm.id}
+                  onChange={(e) =>
+                    setCategoryForm((prev) => ({
+                      ...prev,
+                      id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
+                    }))
+                  }
+                  className={`w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-mono focus:outline-hidden focus:border-[#8B0000] ${
+                    editingCategory ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                  }`}
+                />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Usado internamente para vincular os produtos e no banco de dados.
+                </p>
+              </div>
+
+              {/* Seletor Visual de Ícone */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-gray-700 uppercase">
+                    Ícone da Categoria *
+                  </label>
+                  <span className="text-[11px] font-semibold text-[#8B0000] capitalize flex items-center gap-1">
+                    Selecionado: {categoryForm.icon}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 p-2 rounded-2xl bg-gray-50 border border-gray-200">
+                  {CATEGORY_ICON_OPTIONS.map((opt) => {
+                    const isSelected = categoryForm.icon === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setCategoryForm((prev) => ({ ...prev, icon: opt.id }))}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-[#8B0000] bg-white text-[#8B0000] ring-2 ring-[#8B0000]/25 shadow-xs font-bold'
+                            : 'border-transparent hover:border-gray-200 hover:bg-white text-gray-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center mb-1 transition-colors ${
+                            isSelected
+                              ? 'bg-[#8B0000] text-white shadow-xs'
+                              : 'bg-white border border-gray-200 text-gray-600'
+                          }`}
+                        >
+                          <CategoryIcon iconKey={opt.id} className="w-5 h-5" />
+                        </div>
+                        <span className="text-[10px] truncate w-full">{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                    Ordem de Exibição
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={categoryForm.order_index}
+                    onChange={(e) =>
+                      setCategoryForm((prev) => ({
+                        ...prev,
+                        order_index: parseInt(e.target.value) || 0,
+                      }))
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-hidden focus:border-[#8B0000]"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Menor número aparece primeiro no cardápio.
+                  </p>
+                </div>
+
+                <div className="flex items-center">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-700 mt-2 sm:mt-0 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 w-full">
+                    <input
+                      type="checkbox"
+                      checked={categoryForm.active}
+                      onChange={(e) =>
+                        setCategoryForm((prev) => ({ ...prev, active: e.target.checked }))
+                      }
+                      className="rounded text-[#8B0000] focus:ring-[#8B0000]"
+                    />
+                    <span>Ativa no Cardápio Digital</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCategory(null);
+                    setIsCategoryModalOpen(false);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCategory}
+                  className="px-5 py-2 rounded-xl bg-[#8B0000] hover:bg-[#5E050B] text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  {isSavingCategory ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <span>{editingCategory ? 'Salvar Alterações' : 'Criar Categoria'}</span>
+                  )}
                 </button>
               </div>
             </form>

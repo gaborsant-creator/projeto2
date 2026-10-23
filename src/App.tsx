@@ -24,6 +24,8 @@ import {
   CouponRecord,
   getCurrentCustomer,
   getStoredProducts,
+  getStoredCategories,
+  CategoryRecord,
 } from './services/storage';
 
 const SLIDE_STATES: AppState[] = ['pizza', 'calabresa', 'frango', 'mussarela'];
@@ -52,6 +54,8 @@ export default function App() {
 
   // Produtos do cardápio gerenciados reativamente (atualizados ao editar no /admin)
   const [menuProducts, setMenuProducts] = useState<MenuProduct[]>(() => getStoredProducts());
+  // Categorias gerenciadas dinamicamente
+  const [categories, setCategories] = useState<CategoryRecord[]>(() => getStoredCategories());
 
   // Digital Menu Section State
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
@@ -107,6 +111,16 @@ export default function App() {
     };
     window.addEventListener('cantinho:products_updated', handleProductsUpdated);
     return () => window.removeEventListener('cantinho:products_updated', handleProductsUpdated);
+  }, []);
+
+  // Sincroniza categorias atualizadas no admin
+  useEffect(() => {
+    const handleCategoriesUpdated = (e: any) => {
+      if (e.detail) setCategories(e.detail);
+      else setCategories(getStoredCategories());
+    };
+    window.addEventListener('cantinho:categories_updated', handleCategoriesUpdated);
+    return () => window.removeEventListener('cantinho:categories_updated', handleCategoriesUpdated);
   }, []);
 
   // Carrega e sincroniza o cliente logado no Clube Cantinho
@@ -408,7 +422,7 @@ export default function App() {
   };
 
   const activeCategoryName = selectedCategory
-    ? CATEGORIES.find((c) => c.id === selectedCategory)?.name
+    ? categories.find((c) => c.id === selectedCategory)?.name || CATEGORIES.find((c) => c.id === selectedCategory)?.name
     : null;
 
   return (
