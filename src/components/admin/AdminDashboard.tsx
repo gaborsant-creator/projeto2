@@ -81,6 +81,7 @@ import {
   verifyAdminSession,
   getCustomerConsumptionHabits,
   CustomerConsumptionHabits,
+  resolveProductImage,
 } from '../../services/storage';
 import { MenuProduct, CategoryId } from '../../types';
 import { CATEGORIES } from '../../data/menuData';
@@ -1272,7 +1273,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                       {/* Imagem + Badges */}
                       <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gray-100 mb-3">
                         <img
-                          src={prod.image}
+                          src={resolveProductImage(prod.image, prod.id)}
                           alt={prod.name}
                           className={`w-full h-full object-cover transition-transform duration-300 ${
                             isPaused ? 'grayscale' : ''
@@ -2020,7 +2021,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToMenu }) 
                   <div className="relative rounded-2xl overflow-hidden border border-gray-200 bg-gray-900 group shadow-xs">
                     <div className="w-full h-44 relative bg-gray-950 flex items-center justify-center">
                       <img
-                        src={productForm.image}
+                        src={resolveProductImage(productForm.image, editingProduct?.id)}
                         alt="Foto da Pizza"
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />

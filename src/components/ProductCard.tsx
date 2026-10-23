@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, ShoppingCart, Check } from 'lucide-react';
 import { MenuProduct } from '../types';
+import { resolveProductImage } from '../services/storage';
 
 interface ProductCardProps {
   product: MenuProduct;
@@ -48,7 +49,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#1e0a0d]">
         {!imgError ? (
           <img
-            src={product.image}
+            src={resolveProductImage(product.image, product.id)}
             alt={product.name}
             referrerPolicy="no-referrer"
             onError={() => setImgError(true)}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Minus, ShoppingCart, Check } from 'lucide-react';
 import { MenuProduct, CartItemExtra } from '../types';
+import { resolveProductImage } from '../services/storage';
 
 interface ProductModalProps {
   product: MenuProduct | null;
@@ -121,7 +122,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         {/* Product Image Header */}
         <div className="relative h-56 sm:h-64 w-full overflow-hidden bg-[#1e0a0d]">
           <img
-            src={product.image}
+            src={resolveProductImage(product.image, product.id)}
             alt={product.name}
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"

@@ -135,6 +135,60 @@ if (typeof window !== 'undefined') {
   } catch {}
 }
 
+// Mapeamento dinâmico de todos os assets de imagem empacotados pelo Vite em tempo de build
+const localImages = import.meta.glob<{ default: string }>('../assets/images/*', { eager: true });
+const imageAssetMap: Record<string, string> = {};
+
+for (const [filePath, mod] of Object.entries(localImages)) {
+  const filename = filePath.split('/').pop()?.split('?')[0] || '';
+  if (filename) {
+    imageAssetMap[filename] = (mod as any)?.default || (mod as any);
+  }
+}
+
+// Fallback indexado por ID dos produtos padrões
+const defaultProductImageMap: Record<string, string> = {};
+for (const p of MENU_PRODUCTS) {
+  if (p.id && p.image) {
+    defaultProductImageMap[p.id] = p.image;
+  }
+}
+
+/**
+ * Converte qualquer caminho de imagem (seja do banco, de desenvolvimento /src/ ou de upload)
+ * na URL final empacotada correta e acessível na Vercel em produção.
+ */
+export const resolveProductImage = (rawImage?: string, productId?: string): string => {
+  if (!rawImage) {
+    return (productId && defaultProductImageMap[productId]) || '';
+  }
+
+  const trimmed = rawImage.trim();
+
+  // 1. URLs externas completas, Base64 (uploads do admin) ou Blobs funcionam diretamente
+  if (
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+
+  // 2. Extrai o nome do arquivo de caminhos do tipo /src/assets/images/...
+  const filename = trimmed.split('/').pop()?.split('?')[0] || '';
+  if (filename && imageAssetMap[filename]) {
+    return imageAssetMap[filename];
+  }
+
+  // 3. Fallback pelo catálogo estático original empacotado pelo Vite
+  if (productId && defaultProductImageMap[productId]) {
+    return defaultProductImageMap[productId];
+  }
+
+  return trimmed;
+};
+
 // ============================================================================
 // CONVERSORES & MAPEAMENTO SUPABASE <-> MODELOS TS
 // ============================================================================
@@ -144,7 +198,7 @@ const mapSupabaseProductToMenuProduct = (row: any): MenuProduct => ({
   name: row.nome || row.name || 'Pizza Especial',
   description: row.descricao || row.description || '',
   price: Number(row.preco ?? row.price ?? 0),
-  image: row.imagem || row.image || '',
+  image: resolveProductImage(row.imagem || row.image, row.id),
   category: (row.categoria_id || row.category_id || 'pizzas') as CategoryId,
   featured: !!(row.destaque ?? row.featured),
   isCombo: !!(row.is_combo ?? row.isCombo),
@@ -276,7 +330,10 @@ export const getStoredProducts = (): MenuProduct[] => {
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list) && list.length > 0) {
-        return list;
+        return list.map((p) => ({
+          ...p,
+          image: resolveProductImage(p.image, p.id),
+        }));
       }
     }
   } catch (e) {
@@ -285,6 +342,7 @@ export const getStoredProducts = (): MenuProduct[] => {
 
   const initial = MENU_PRODUCTS.map((p) => ({
     ...p,
+    image: resolveProductImage(p.image, p.id),
     active: p.active !== false,
   }));
   saveStoredProducts(initial);

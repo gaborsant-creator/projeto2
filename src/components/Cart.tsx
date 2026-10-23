@@ -21,6 +21,7 @@ import {
   CouponRecord,
   fetchActiveCoupons,
   calculateCouponDiscount,
+  resolveProductImage,
 } from '../services/storage';
 import { formatPhoneMask } from './CustomerRegisterModal';
 
@@ -272,7 +273,7 @@ export const Cart: React.FC<CartProps> = ({
                       className="p-3.5 rounded-xl border border-[#E8E8E8] bg-[#FFFFFF] flex gap-3.5 items-start shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
                     >
                       <img
-                        src={item.product.image}
+                        src={resolveProductImage(item.product.image, item.product.id)}
                         alt={item.product.name}
                         referrerPolicy="no-referrer"
                         className="w-16 h-16 rounded-lg object-cover shrink-0 bg-[#1e0a0d]"
