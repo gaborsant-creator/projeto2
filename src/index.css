@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    overflow-x: clip;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: #f8f8f8;
+    background-color: #050505;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+
+  *, button, input, select, textarea {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .font-display {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.025em;
+  }
+}
+
+.perspective-1200 {
+  perspective: 1200px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(var(--base-rot, 0deg));
+  }
+  50% {
+    transform: translateY(-8px) rotate(calc(var(--base-rot, 0deg) + 2deg));
+  }
+}
+
+@keyframes floatMid {
+  0%, 100% {
+    transform: translateY(0px) rotate(var(--base-rot, 0deg));
+  }
+  50% {
+    transform: translateY(6px) rotate(calc(var(--base-rot, 0deg) - 2deg));
+  }
+}
+
+@keyframes floatReverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(var(--base-rot, 0deg));
+  }
+  50% {
+    transform: translateY(-10px) rotate(calc(var(--base-rot, 0deg) - 1.5deg));
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 5.5s ease-in-out infinite;
+}
+
+.animate-float-mid {
+  animation: floatMid 4.8s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatReverse 6.2s ease-in-out infinite;
+}
+
+/* ========================================================= */
+/* MODO DARK PARA PAINEL ADMINISTRATIVO (CANTINHO ADMIN)     */
+/* ========================================================= */
+.admin-dark {
+  background-color: #0b0d14 !important;
+  color: #f3f4f6 !important;
+  color-scheme: dark;
+}
+
+/* Header */
+.admin-dark header {
+  background-color: #121520 !important;
+  border-color: #1e2434 !important;
+}
+
+.admin-dark header .border-gray-100,
+.admin-dark header .border-gray-200 {
+  border-color: #1e2434 !important;
+}
+
+.admin-dark header button.hover\:bg-gray-100:hover {
+  background-color: #1c2232 !important;
+  color: #ffffff !important;
+}
+
+/* Superfícies de Cards, Painéis e Containers Brancos */
+.admin-dark .bg-white {
+  background-color: #141724 !important;
+  border-color: #212638 !important;
+  color: #f3f4f6 !important;
+}
+
+/* Rodapés de cards, fundos secundários e seções cinzas */
+.admin-dark [class*="bg-gray-50"],
+.admin-dark [class*="bg-gray-100"],
+.admin-dark .bg-gray-50,
+.admin-dark .bg-gray-100,
+.admin-dark .bg-gray-50\/70,
+.admin-dark .bg-gray-50\/80,
+.admin-dark .bg-gray-50\/60,
+.admin-dark .bg-gray-50\/50,
+.admin-dark .bg-gray-50\/40,
+.admin-dark .bg-gray-50\/30,
+.admin-dark .bg-gray-50\/20 {
+  background-color: #0e111a !important;
+  border-color: #1e2333 !important;
+}
+
+.admin-dark [class*="bg-gray-200"],
+.admin-dark .bg-gray-200 {
+  background-color: #1a2030 !important;
+  border-color: #252e46 !important;
+  color: #e2e8f0 !important;
+}
+
+/* Bordas em geral */
+.admin-dark .border-gray-100,
+.admin-dark .border-gray-200,
+.admin-dark .border-gray-300,
+.admin-dark [class*="border-gray-100"],
+.admin-dark [class*="border-gray-200"],
+.admin-dark .divide-gray-100,
+.admin-dark .divide-gray-200 {
+  border-color: #212638 !important;
+}
+
+/* Cores de Texto com Alto Contraste */
+.admin-dark .text-gray-900,
+.admin-dark .text-\[\#111827\],
+.admin-dark .text-\[\#1F2937\] {
+  color: #ffffff !important;
+}
+
+.admin-dark .text-gray-800 {
+  color: #f1f5f9 !important;
+}
+
+.admin-dark .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+.admin-dark .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+.admin-dark .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+.admin-dark .text-gray-400 {
+  color: #64748b !important;
+}
+
+/* Botões Secundários (Detalhes, Cancelar, etc.) */
+.admin-dark button.bg-white,
+.admin-dark button.border-gray-200 {
+  background-color: #171c2b !important;
+  border-color: #272f44 !important;
+  color: #f1f5f9 !important;
+}
+
+.admin-dark button.bg-white:hover,
+.admin-dark button.border-gray-200:hover,
+.admin-dark .hover\:bg-gray-100:hover,
+.admin-dark .hover\:bg-gray-50:hover {
+  background-color: #22293e !important;
+  color: #ffffff !important;
+  border-color: #3b4666 !important;
+}
+
+/* Badges de Status dos Pedidos e Entregas */
+.admin-dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.16) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.admin-dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.16) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+}
+
+.admin-dark .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.16) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+}
+
+.admin-dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+.admin-dark .bg-rose-100 {
+  background-color: rgba(244, 63, 94, 0.16) !important;
+  color: #fb7185 !important;
+  border: 1px solid rgba(244, 63, 94, 0.3) !important;
+}
+
+/* Badges Suaves de Cards de Métricas */
+.admin-dark .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+  color: #fbbf24 !important;
+}
+.admin-dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.14) !important;
+  color: #60a5fa !important;
+}
+.admin-dark .bg-purple-50 {
+  background-color: rgba(168, 85, 247, 0.14) !important;
+  color: #c084fc !important;
+}
+.admin-dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+  color: #34d399 !important;
+}
+.admin-dark .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.14) !important;
+  color: #fb7185 !important;
+}
+
+/* Inputs, Textareas e Selects */
+.admin-dark input,
+.admin-dark textarea,
+.admin-dark select {
+  background-color: #0d1017 !important;
+  border-color: #272f44 !important;
+  color: #f8fafc !important;
+}
+
+.admin-dark input:focus,
+.admin-dark textarea:focus,
+.admin-dark select:focus {
+  border-color: #991b1b !important;
+  outline: none !important;
+}
+
+.admin-dark input::placeholder,
+.admin-dark textarea::placeholder {
+  color: #4b5563 !important;
+}
+
+/* Tabelas */
+.admin-dark table thead,
+.admin-dark table thead th {
+  background-color: #0f121b !important;
+  color: #94a3b8 !important;
+  border-color: #212638 !important;
+}
+
+.admin-dark table tbody tr {
+  border-color: #212638 !important;
+}
+
+.admin-dark table tbody tr:hover {
+  background-color: #191e2e !important;
+}
+
+/* Modais e Diálogos Flutuantes */
+.admin-dark .fixed.inset-0 .bg-white {
+  background-color: #141724 !important;
+  border-color: #272f44 !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9) !important;
+}
+
+/* Scrollbars estilizadas no Dark Mode */
+.admin-dark *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.admin-dark *::-webkit-scrollbar-track {
+  background: #0f121a;
+}
+.admin-dark *::-webkit-scrollbar-thumb {
+  background: #2a324b;
+  border-radius: 9999px;
+}
+.admin-dark *::-webkit-scrollbar-thumb:hover {
+  background: #3b4666;
+}
